@@ -1,0 +1,342 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS1101S HUD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown-light.min.css" integrity="sha512-X175XRJAO6PHAUi8AA7GP8uUF5Wiv+w9bOi64i02CHKDQBsO1yy0jLSKaUKg/NhRCDYBmOLQCfKaTaXiyZlLrw==" crossorigin="anonymous" referrerpolicy="no-referrer"/>
+
+  <style type="text/tailwindcss">
+    body {
+      font-family: Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <div class="mt-4 w-full flex justify-center">
+    <div class="w-[80vw] flex text-2xl items-center">
+      <div class="font-extralight flex items-center">
+        Start Time: <span id="start" class="text-3xl px-2 font-light"></span>
+      </div>
+      <div class="flex-grow">
+        <div class="flex justify-center">
+          <div id="pageTitle" class="font-semibold text-3xl bg-slate-200 py-2 px-3 rounded-lg">CS1101S Assessment</div>
+        </div>
+      </div>
+      <div class="font-extralight flex items-center">
+        End Time: <span id="end" class="text-3xl px-2 font-light"></span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="my-8 w-full flex justify-center items-center gap-32">
+    <div class="flex flex-col items-center">
+      <div class="text-2xl font-semibold mb-2 text-slate-600">Current Time</div>
+      <div id="clock" class="font-light text-[6rem] leading-none text-slate-500">00:00:00</div>
+    </div>
+    <div class="flex flex-col items-center">
+      <div class="text-2xl font-semibold mb-2">Time Remaining</div>
+      <div id="timer" class="font-light text-[6rem] leading-none">00:00:00</div>
+    </div>
+  </div>
+
+  <div id="passwd" class="hidden mb-6 w-full flex justify-center">
+    <div class="text-3xl font-extralight">Password: <code id="password"></code></div>
+  </div>
+
+  <div class="mt-4 mb-8 w-full flex justify-center text-lg">
+    <div class="w-[75vw]">
+      <span class="inline-block font-bold text-2xl border border-solid border-slate-800 rounded-lg px-1.5 py-0.5">Clarifications:</span>
+      <div class="markdown-body mx-1 my-0"><md-block id="clarifications"></md-block></div>
+    </div>
+  </div>
+
+  <script>
+    tailwind.config = {
+      corePlugins: {
+        preflight: false
+      }
+    }
+  </script>
+  <script>
+    // start time and end times in 24hr format
+    let start = '1300';
+    let end = '1440';
+    const FONT_SCALING = '100%';
+    const LOCAL_TESTING = false;
+    const PASSWORD_CONFIG_FILE = 'password.json';
+    const DEFAULT_TITLE = 'CS1101S Assessment';
+
+    const md = window.markdownit({html: true});
+    const urlParams = new URLSearchParams(window.location.search);
+    let passwordConfig = {
+      password: '',
+      showWhenRemainingMinutes: 15
+    };
+
+    function applyTitle() {
+      const title = urlParams.get('title') || DEFAULT_TITLE;
+      document.getElementById('pageTitle').textContent = title;
+      document.title = title;
+    }
+
+    function parseStartTime() {
+      const startTime = urlParams.get('start');
+      const duration = urlParams.get('duration');
+
+      if (startTime) {
+        start = startTime;
+      }
+
+      if (startTime && duration) {
+        const date = hhmmToDate(start);
+        const endTime = new Date(date.getTime() + Number(duration) * 60000);
+        end =
+          endTime.getHours().toString().padStart(2, '0') +
+          endTime.getMinutes().toString().padStart(2, '0');
+      }
+    }
+
+    function updateDisplays() {
+      const now = new Date();
+
+      // Update clock
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const seconds = now.getSeconds().toString().padStart(2, '0');
+      document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
+
+      // Update timer
+      const delta = getRemainingMs(now);
+
+      if (!hasStarted(now) || delta <= 0) {
+        document.getElementById('timer').innerHTML = '00:00:00';
+      } else {
+        const totalSeconds = Math.ceil(delta / 1000);
+        const timeHours = Math.floor(totalSeconds / 3600);
+        const timeMinutes = Math.floor((totalSeconds % 3600) / 60);
+        const timeSeconds = totalSeconds % 60;
+
+        const timer =
+          timeHours.toString().padStart(2, '0') +
+          '<span class="px-1">:</span>' +
+          timeMinutes.toString().padStart(2, '0') +
+          '<span class="px-1">:</span>' +
+          timeSeconds.toString().padStart(2, '0');
+
+        document.getElementById('timer').innerHTML = timer;
+      }
+
+      updatePasswordVisibility();
+
+      // Schedule exactly on the next second boundary
+      const delay = 1000 - (Date.now() % 1000);
+      setTimeout(updateDisplays, delay);
+    }
+
+    function parseHHMM(hhmm) {
+      const totalMinutes =
+        parseInt(hhmm.slice(0, 2), 10) * 60 +
+        parseInt(hhmm.slice(2), 10);
+
+      return {
+        dayOffset: Math.floor(totalMinutes / 1440),
+        minutesOfDay: totalMinutes % 1440
+      };
+    }
+
+    function hhmmToDate(hhmm, baseDate = new Date()) {
+      const { dayOffset, minutesOfDay } = parseHHMM(hhmm);
+      const hh = Math.floor(minutesOfDay / 60);
+      const mm = minutesOfDay % 60;
+
+      const date = new Date(
+        baseDate.getFullYear(),
+        baseDate.getMonth(),
+        baseDate.getDate(),
+        hh,
+        mm,
+        0,
+        0
+      );
+
+      date.setDate(date.getDate() + dayOffset);
+      return date;
+    }
+
+    function getSessionBounds(now = new Date()) {
+      const startParts = parseHHMM(start);
+      const endParts = parseHHMM(end);
+
+      let startTime = hhmmToDate(start, now);
+
+      const wraps =
+        endParts.dayOffset > startParts.dayOffset ||
+        (endParts.dayOffset === startParts.dayOffset &&
+          endParts.minutesOfDay <= startParts.minutesOfDay);
+
+      // If session wraps and we're after midnight, the real start was yesterday.
+      if (wraps && now < startTime) {
+        startTime.setDate(startTime.getDate() - 1);
+      }
+
+      // Build endTime relative to startTime's date, not today's date.
+      let endTime = new Date(startTime);
+      endTime.setHours(
+        Math.floor(endParts.minutesOfDay / 60),
+        endParts.minutesOfDay % 60,
+        0,
+        0
+      );
+
+      const extraDays = endParts.dayOffset - startParts.dayOffset;
+      if (extraDays !== 0) {
+        endTime.setDate(endTime.getDate() + extraDays);
+      }
+
+      if (endTime <= startTime) {
+        endTime.setDate(endTime.getDate() + 1);
+      }
+
+      return { startTime, endTime };
+    }
+
+    function hasStarted(now = new Date()) {
+      const { startTime } = getSessionBounds(now);
+      return now >= startTime;
+    }
+
+    function getRemainingMs(now = new Date()) {
+      const { startTime, endTime } = getSessionBounds(now);
+
+      if (now < startTime) {
+        return 0;
+      }
+
+      return Math.max(0, endTime - now);
+    }
+
+    function updatePasswordVisibility() {
+      const pwd = passwordConfig.password?.toString() ?? '';
+      const thresholdMinutes = Number(passwordConfig.showWhenRemainingMinutes);
+      const thresholdMs = Number.isFinite(thresholdMinutes)
+        ? thresholdMinutes * 60000
+        : 15 * 60000;
+
+      const remainingMs = getRemainingMs();
+      const shouldShow =
+        pwd.trim() !== '' &&
+        remainingMs > 0 &&
+        remainingMs <= thresholdMs;
+
+      if (shouldShow) {
+        document.getElementById('password').textContent = pwd;
+        document.getElementById('passwd').classList.remove('hidden');
+      } else {
+        document.getElementById('password').textContent = '';
+        document.getElementById('passwd').classList.add('hidden');
+      }
+    }
+
+    function formatTime(time, hr = true) {
+      let hour = hr ? time.slice(0, 2) : parseInt(time.slice(0, 2), 10);
+      const minute = time.slice(2);
+
+      if (!hr) {
+        let suffix = 'PM';
+        if (hour >= 12) suffix = 'PM';
+        else suffix = 'AM';
+
+        if (hour > 12) hour -= 12;
+        if (hour === 0) hour = 12;
+
+        return `${hour}:${minute} ${suffix}`;
+      }
+
+      return `${hour}:${minute}`;
+    }
+
+    // replaces mkdocs editing syntax either with a red strikethrough tag or a blue span tag
+    function processEditingSyntax(content) {
+      const strikes = [...content.matchAll(/{--([ -~]+?)--}/g)];
+      for (let i = 0; i < strikes.length; i++) {
+        const text = strikes[i][0];
+        content = content.replace(text, `<s style="color: red">${strikes[i][1]}</s>`);
+      }
+
+      const additions = [...content.matchAll(/{\+\+([ -~]+?)\+\+}/g)];
+      for (let i = 0; i < additions.length; i++) {
+        const text = additions[i][0];
+        content = content.replace(text, `<span style="color: blue">${additions[i][1]}</span>`);
+      }
+
+      return content;
+    }
+
+    function refreshClarifications() {
+      if (LOCAL_TESTING) {
+        document.getElementById('clarifications').innerHTML = processEditingSyntax(md.render(``));
+        return;
+      }
+
+      fetch('clarifications.md', {cache: 'no-cache'})
+        .then(res => res.text())
+        .then(data => {
+          document.getElementById('clarifications').innerHTML = processEditingSyntax(md.render(data));
+        })
+        .catch(err => {
+          console.log(err);
+          document.getElementById('clarifications').innerHTML = 'Error loading, check console.';
+        });
+    }
+
+    function refreshPasswordConfig() {
+      fetch(PASSWORD_CONFIG_FILE, {cache: 'no-cache'})
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`Unable to load ${PASSWORD_CONFIG_FILE}`);
+          }
+          return res.json();
+        })
+        .then(data => {
+          passwordConfig = {
+            password: data.password ?? '',
+            showWhenRemainingMinutes: Number(data.showWhenRemainingMinutes ?? 15)
+          };
+          updatePasswordVisibility();
+        })
+        .catch(err => {
+          console.log(err);
+          passwordConfig = {
+            password: '',
+            showWhenRemainingMinutes: 15
+          };
+          updatePasswordVisibility();
+        });
+    }
+
+  window.onload = () => {
+    parseStartTime();
+    applyTitle();
+
+    document.getElementById('clarifications').style.fontSize = FONT_SCALING;
+    document.getElementById('start').innerHTML = formatTime(start);
+    document.getElementById('end').innerHTML = formatTime(end);
+
+    updateDisplays();
+
+    refreshClarifications();
+    setInterval(refreshClarifications, 10000);
+
+    refreshPasswordConfig();
+    setInterval(refreshPasswordConfig, 10000);
+  };
+  </script>
+</body>
+</html>
