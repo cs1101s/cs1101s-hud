@@ -1,17 +1,15 @@
-### INSTRUCTIONS TO CANDIDATES
+### General
 
-1. This is a CLOSED-BOOK assessment. You are only allowed to refer to <!-- e.g. one double-sided A4-size paper -->.
+1. All programs in this assessment are Python §1 programs
 
-2. <!-- Only the files/submission location that will be graded -->.
+2. Three marks are awarded for each correct answer.
 
-3. <!-- Any rules about skeleton files, new files, allowed materials -->.
+<div style="font-size: 100%;">
 
-4. <!-- Any run/compile/submit commands specific to this assessment -->.
+### Page 4 — Question 5
 
-5. <!-- Submission instructions and what to do at the end of the assessment -->.
+The example should read:
 
-**IMPORTANT**: <!-- Any consequences for late/invalid submissions -->.
-
-<div style="font-size: 200%;">
+> For example, there are two command plans for reaching 3: `BOOST/BOOST` and `WARP/BOOST`.
 
 </div>
