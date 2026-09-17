@@ -46,8 +46,12 @@
     </div>
   </div>
 
-  <div id="passwd" class="hidden mb-6 w-full flex justify-center">
-    <div class="text-3xl font-extralight">Password: <code id="password"></code></div>
+  <div id="passwd" class="mb-6 w-full flex justify-center">
+    <div class="text-3xl font-extralight flex items-center gap-2">
+      Password:
+      <span id="passwordDisplay" class="cursor-pointer font-mono border border-dashed border-slate-400 rounded px-3 py-1 hover:bg-slate-100" title="Click to edit"></span>
+      <input id="passwordInput" type="text" class="hidden font-mono text-3xl border border-slate-400 rounded px-3 py-1 outline-none focus:border-blue-500">
+    </div>
   </div>
 
   <div class="mt-4 mb-8 w-full flex justify-center text-lg">
@@ -70,15 +74,12 @@
     let end = '1440';
     const FONT_SCALING = '100%';
     const LOCAL_TESTING = false;
-    const PASSWORD_CONFIG_FILE = 'password.json';
     const DEFAULT_TITLE = 'CS1101S Assessment';
 
     const md = window.markdownit({html: true});
     const urlParams = new URLSearchParams(window.location.search);
-    let passwordConfig = {
-      password: '',
-      showWhenRemainingMinutes: 15
-    };
+    // manually typed in by the invigilator; not persisted anywhere
+    let currentPassword = '';
 
     function applyTitle() {
       const title = urlParams.get('title') || DEFAULT_TITLE;
@@ -132,8 +133,6 @@
 
         document.getElementById('timer').innerHTML = timer;
       }
-
-      updatePasswordVisibility();
 
       // Schedule exactly on the next second boundary
       const delay = 1000 - (Date.now() % 1000);
@@ -222,26 +221,28 @@
       return Math.max(0, endTime - now);
     }
 
-    function updatePasswordVisibility() {
-      const pwd = passwordConfig.password?.toString() ?? '';
-      const thresholdMinutes = Number(passwordConfig.showWhenRemainingMinutes);
-      const thresholdMs = Number.isFinite(thresholdMinutes)
-        ? thresholdMinutes * 60000
-        : 15 * 60000;
+    function showPasswordDisplay() {
+      const display = document.getElementById('passwordDisplay');
+      const input = document.getElementById('passwordInput');
+      display.textContent = currentPassword || 'Click to set';
+      display.classList.remove('hidden');
+      input.classList.add('hidden');
+    }
 
-      const remainingMs = getRemainingMs();
-      const shouldShow =
-        pwd.trim() !== '' &&
-        remainingMs > 0 &&
-        remainingMs <= thresholdMs;
+    function enterPasswordEditMode() {
+      const display = document.getElementById('passwordDisplay');
+      const input = document.getElementById('passwordInput');
+      input.value = currentPassword;
+      display.classList.add('hidden');
+      input.classList.remove('hidden');
+      input.focus();
+      input.select();
+    }
 
-      if (shouldShow) {
-        document.getElementById('password').textContent = pwd;
-        document.getElementById('passwd').classList.remove('hidden');
-      } else {
-        document.getElementById('password').textContent = '';
-        document.getElementById('passwd').classList.add('hidden');
-      }
+    function savePasswordEdit() {
+      const input = document.getElementById('passwordInput');
+      currentPassword = input.value;
+      showPasswordDisplay();
     }
 
     function formatTime(time, hr = true) {
@@ -296,31 +297,6 @@
         });
     }
 
-    function refreshPasswordConfig() {
-      fetch(PASSWORD_CONFIG_FILE, {cache: 'no-cache'})
-        .then(res => {
-          if (!res.ok) {
-            throw new Error(`Unable to load ${PASSWORD_CONFIG_FILE}`);
-          }
-          return res.json();
-        })
-        .then(data => {
-          passwordConfig = {
-            password: data.password ?? '',
-            showWhenRemainingMinutes: Number(data.showWhenRemainingMinutes ?? 15)
-          };
-          updatePasswordVisibility();
-        })
-        .catch(err => {
-          console.log(err);
-          passwordConfig = {
-            password: '',
-            showWhenRemainingMinutes: 15
-          };
-          updatePasswordVisibility();
-        });
-    }
-
   window.onload = () => {
     parseStartTime();
     applyTitle();
@@ -329,13 +305,20 @@
     document.getElementById('start').innerHTML = formatTime(start);
     document.getElementById('end').innerHTML = formatTime(end);
 
+    showPasswordDisplay();
+    document.getElementById('passwordDisplay').addEventListener('click', enterPasswordEditMode);
+    document.getElementById('passwordInput').addEventListener('blur', savePasswordEdit);
+    document.getElementById('passwordInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('passwordInput').blur();
+      }
+    });
+
     updateDisplays();
 
     refreshClarifications();
     setInterval(refreshClarifications, 10000);
-
-    refreshPasswordConfig();
-    setInterval(refreshPasswordConfig, 10000);
   };
   </script>
 </body>
